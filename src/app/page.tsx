@@ -48,26 +48,36 @@ import { MinusIcon } from '@/components/icons/MinusIcon';
 
 import useOrder from '@/hooks/useOrder';
 import { convertEvent } from '../lib/utils/nostr';
-import { calculateTicketPrice } from '../lib/utils/price';
 import { set } from 'zod';
 
-// Mock data
+// Constants for clarity and reusability
+const SATOSHI_UNIT = 100_000_000;
+const VALUE_TYPE = 'SAT';
+
 const TICKET = {
   title: 'Cowork de La Crypta',
-  description: 'De 10:00hs a 20:00hsm en la casa de La Crypta ',
+  description: 'De 10:00hs a 20:00hs en la casa de La Crypta',
   imageUrl: 'https://placehold.co/400',
-  value: parseInt(process.env.TICKET_PRICE!),
-  valueType: 'SAT',
+  value: parseInt(process.env.TICKET_PRICE!) * SATOSHI_UNIT, // Ensures value is in satoshis
+  valueType: VALUE_TYPE,
 };
 
+// Encapsulate the calculation in a reusable function
+const calculateTicketTotal = (qty: number, unitValue: number) => qty * unitValue;
+
 export default function Page() {
-  // Flow
+  // State hooks
   const [screen, setScreen] = useState<string>('information');
-  const [isLoading, setIsloading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [alertText, setAlertText] = useState<string>('Try again.');
+
+  const [ticketsQty, setTicketsQty] = useState<number>(1);
+  const [ticketsValue, setTicketsValue] = useState<number>(calculateTicketTotal(1, TICKET.value));
+  
 
   // Dialog for reset invoice
   const [open, setOpen] = useState<boolean>(false);
-  const [alertText, setAlertText] = useState<string>('Try again.');
+
 
   // Claim invoice
   const [newEvent, setNewEvent] = useState<Event | undefined>(undefined);
@@ -75,18 +85,21 @@ export default function Page() {
     undefined
   );
 
-  const [ticketsValue, setTicketsValue] = useState<number>(0);
+  // Function to handle user input and multiply qty
+  const handleUserQtyInput = (userQty: number) => {
+    setTicketsQty(1 * userQty); // Adjust multiplier as needed
+  };
 
   // Hooks
   const {
     orderReferenceId,
-    ticketsQty,
+    
     paymentRequest,
     isPaid,
     requestNewOrder,
     claimOrderPayment,
     setOrderReferenceId,
-    setTicketsQty,
+    
     setPaymentRequest,
     setIsPaid,
     clear,
@@ -128,44 +141,27 @@ export default function Page() {
     events && events.length > 0 && processPayment();
   }, [events]);
 
-  // UI Button "Confirm order"
-  const handleCreateOrder = useCallback(
-    async (data: OrderUserData) => {
+
+    // Memoized handler to avoid unnecessary re-renders
+    const handleCreateOrder = useCallback(async (data: OrderUserData) => {
       if (isLoading) return;
-
-      setIsloading(true);
-      clear();
-
-      setScreen('payment');
-
-      // Create new order
+  
+      setIsLoading(true);
       try {
         const order = await requestNewOrder({ ...data, qty: ticketsQty });
         setPaymentRequest(order.pr);
         setOrderReferenceId(order.orderReferenceId);
-
-        window.scrollTo({
-          top: 0,
-          behavior: 'auto',
-        });
-
+  
+        setTicketsValue(calculateTicketTotal(ticketsQty, TICKET.value)); // Update value with qty
+        setScreen('payment');
         setUserData(data);
       } catch (error: any) {
-        setOpen(true);
         setAlertText(error.message);
+        setOpen(true);
       } finally {
-        setIsloading(false);
+        setIsLoading(false);
       }
-    },
-    [
-      isLoading,
-      ticketsQty,
-      clear,
-      requestNewOrder,
-      setPaymentRequest,
-      setOrderReferenceId,
-    ]
-  );
+    }, [isLoading, ticketsQty, requestNewOrder]);
 
   // UI Button "Back to page"
   const backToPage = useCallback(() => {
@@ -178,10 +174,11 @@ export default function Page() {
 
   // Calculate ticket price
   useEffect(() => {
+  
     const calculateValue = async () => {
       try {
         const total = Math.round(
-          (await calculateTicketPrice(ticketsQty, TICKET.value)) / 1000
+          (await ticketsQty * TICKET.value)
         );
 
         setTicketsValue(total);
@@ -200,7 +197,7 @@ export default function Page() {
   }, [isPaid]);
 
   useEffect(() => {
-    setIsloading(false);
+    setIsLoading(false);
   }, []);
 
   // if (isLoading) {
@@ -230,7 +227,7 @@ export default function Page() {
                     <div>
                       <h2 className="text-md">{TICKET.title}</h2>
                       <p className="font-semibold text-lg">
-                        {TICKET.value} {' ARS'}
+                        {TICKET.value} {' SAT'}
                       </p>
                     </div>
                     <div className="flex gap-2 items-center">
@@ -274,7 +271,7 @@ export default function Page() {
                     <p className="text-text">Total</p>
                     <p className="font-bold text-md">
                       {ticketsValue
-                        ? ticketsValue + ' ' + TICKET.valueType
+                        ? ticketsValue + ' ' + 'SAT'
                         : 'Calculating...'}
                     </p>
                   </div>
@@ -293,7 +290,7 @@ export default function Page() {
                         Show order summary
                         <p className="font-bold text-lg no-underline">
                           {ticketsValue
-                            ? ticketsValue + ' ' + TICKET.valueType
+                            ? ticketsValue + ' ' + 'SAT'
                             : 'Calculating...'}
                         </p>
                       </div>
@@ -304,7 +301,7 @@ export default function Page() {
                           <div>
                             <h2 className="text-md">{TICKET.title}</h2>
                             <p className="font-semibold text-lg">
-                              {TICKET.value} {' ARS'}
+                              {TICKET.value} {' SAT'}
                             </p>
                           </div>
                           <div className="flex gap-2 items-center">
